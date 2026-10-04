@@ -1,5 +1,1 @@
-import { PlaceholderScreen } from '@/components/layout/PlaceholderScreen';
-
-export default function Route() {
-  return <PlaceholderScreen icon="musical-note" title="Now Playing" />;
-}
+export { NowPlayingScreen as default } from '@/features/player/screens/NowPlayingScreen';
