@@ -21,8 +21,26 @@ import {
 import { DownloadError, messageForCode, RESUMABLE_CODES } from './errors';
 import type { FileTransfer } from './fileTransfer';
 
-/** Smallest plausible MP3; anything smaller is an error body or a truncated file. */
+/** Smallest plausible MP3; anything smaller is a truncated file. */
 const MIN_MP3_BYTES = 1024;
+
+/** Failures caused by connectivity, retried automatically on return to the app. */
+const AUTO_RETRY_CODES = new Set(['network_error', 'interrupted', 'timeout']);
+const AUTO_RETRY_WINDOW_MS = 60 * 60 * 1000;
+
+/**
+ * expo-file-system rejects non-2xx responses with "...HTTP <status>..." and
+ * writes nothing. Map the status so e.g. a bad key isn't shown as a network
+ * interruption.
+ */
+export function fileTransferError(error: unknown): DownloadError {
+  const status = Number(/HTTP\D{0,12}(\d{3})/i.exec(String(error))?.[1]);
+  if (status === 401) return new DownloadError('unauthorized');
+  if (status === 403) return new DownloadError('invalid_token');
+  if (status === 404 || status === 410) return new DownloadError('file_expired');
+  if (status >= 500) return new DownloadError('server_error');
+  return new DownloadError('interrupted');
+}
 
 export type DownloadManagerDeps = {
   api: Pick<ApiClient, 'getMetadata' | 'startDownload' | 'getJob' | 'deleteJob' | 'fileRequest'>;
@@ -144,15 +162,31 @@ export class DownloadManager {
     await repos.downloads.delete(id);
   }
 
-  /** Resumes every unfinished import (app start, or return to foreground). */
-  async resumeActive(): Promise<string[]> {
+  /**
+   * Resumes every unfinished import (app start, or return to foreground), and
+   * retries recent ones that failed only because the network dropped while
+   * the app was suspended.
+   */
+  async resumeActive(now = Date.now()): Promise<string[]> {
     const repos = await this.deps.getRepositories();
-    const active = await repos.downloads.getActive();
     const resumed: string[] = [];
-    for (const record of active) {
+    for (const record of await repos.downloads.getActive()) {
       if (this.running.has(record.id)) continue;
       void this.run(record.id);
       resumed.push(record.id);
+    }
+    for (const record of await repos.downloads.getRecent(20)) {
+      const recent = now - record.updatedAt < AUTO_RETRY_WINDOW_MS;
+      if (
+        record.status === 'failed' &&
+        recent &&
+        record.errorCode != null &&
+        AUTO_RETRY_CODES.has(record.errorCode) &&
+        !this.running.has(record.id)
+      ) {
+        await this.retry(record.id);
+        resumed.push(record.id);
+      }
     }
     return resumed;
   }
@@ -162,9 +196,10 @@ export class DownloadManager {
     if (this.running.has(id)) return;
     const controller = new AbortController();
     this.running.set(id, controller);
-    const repos = await this.deps.getRepositories();
-    let record = await repos.downloads.getById(id);
+    let record: DownloadRecord | null = null;
     try {
+      const repos = await this.deps.getRepositories();
+      record = await repos.downloads.getById(id);
       if (!record || !isActive(record.status)) return;
 
       if (!record.jobId) {
@@ -182,7 +217,7 @@ export class DownloadManager {
       const job = await this.pollUntilComplete(record, controller.signal, (r) => (record = r));
       record = await this.saveToLibrary(record, job, controller.signal);
     } catch (error) {
-      if (!record) return;
+      if (!record) return; // e.g. the database couldn't open; resumes next launch
       const failure = controller.signal.aborted
         ? new DownloadError('cancelled')
         : this.toDownloadError(error);
@@ -277,7 +312,7 @@ export class DownloadManager {
       })
       .catch((error: unknown) => {
         if (signal.aborted) throw new DownloadError('cancelled');
-        throw error instanceof DownloadError ? error : new DownloadError('interrupted');
+        throw error instanceof DownloadError ? error : fileTransferError(error);
       });
 
     // A size mismatch means a truncated transfer or an error page saved as a file.
@@ -299,6 +334,8 @@ export class DownloadManager {
       }
     }
 
+    // A cancel during artwork download must still stop the import.
+    if (signal.aborted) throw new DownloadError('cancelled');
     const repos = await this.deps.getRepositories();
     try {
       await repos.songs.insert({
