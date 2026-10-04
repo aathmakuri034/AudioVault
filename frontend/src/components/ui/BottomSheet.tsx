@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors, radii, spacing } from '@/theme';
@@ -7,21 +7,35 @@ import { colors, radii, spacing } from '@/theme';
 import { AppText } from './AppText';
 import { Icon, type IconName } from './Icon';
 
-/** Lightweight modal bottom sheet used for contextual menus. */
+/**
+ * Lightweight modal bottom sheet used for contextual menus.
+ *
+ * `onDismissed` fires after the hide animation completes. Run follow-up UI
+ * (navigation, alerts, another sheet) from there: on iOS, presenting while a
+ * modal is still dismissing can be silently dropped.
+ */
 export function BottomSheet({
   visible,
   onClose,
+  onDismissed,
   header,
   children,
 }: {
   visible: boolean;
   onClose: () => void;
+  onDismissed?: () => void;
   header?: ReactNode;
   children: ReactNode;
 }) {
   const insets = useSafeAreaInsets();
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+      onDismiss={Platform.OS === 'ios' ? onDismissed : undefined}
+    >
       <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close menu" />
       <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.md }]}>
         <View style={styles.grabber} />
@@ -54,7 +68,7 @@ export function SheetAction({
       ]}
     >
       <Icon name={icon} size={22} color={color} />
-      <AppText variant="body" style={{ color }}>
+      <AppText variant="body" style={{ color }} numberOfLines={1}>
         {label}
       </AppText>
     </Pressable>
