@@ -1,5 +1,1 @@
-import { PlaceholderScreen } from '@/components/layout/PlaceholderScreen';
-
-export default function Route() {
-  return <PlaceholderScreen icon="library" title="Library" />;
-}
+export { LibraryScreen as default } from '@/features/library/screens/LibraryScreen';
