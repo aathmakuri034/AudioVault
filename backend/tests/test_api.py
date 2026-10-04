@@ -289,7 +289,7 @@ async def test_file_expired_when_file_gone(app, client):
 
 
 async def test_startup_purges_temp_dir(make_harness, tmp_path):
-    stale = tmp_path / "work" / "stale"
+    stale = tmp_path / "work" / str(uuid.uuid4())
     stale.mkdir(parents=True)
     (stale / "old.mp3").write_bytes(b"x")
     h = await make_harness()

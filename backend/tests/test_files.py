@@ -26,7 +26,19 @@ def test_safe_delete_and_purge(tmp_path):
     assert safe_delete_tree(tmp_path, d)
     assert not d.exists()
     assert not safe_delete_tree(tmp_path, tmp_path.parent)
-    (tmp_path / "b").mkdir()
-    (tmp_path / "c.txt").write_text("x")
+
+
+def test_purge_only_removes_job_directories(tmp_path):
+    stale = tmp_path / str(uuid.uuid4())
+    stale.mkdir()
+    (stale / "x.mp3").write_bytes(b"x")
+    (tmp_path / "not-a-job").mkdir()
+    (tmp_path / "keep.txt").write_text("x")
     purge_dir(tmp_path)
-    assert list(tmp_path.iterdir()) == []
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["keep.txt", "not-a-job"]
+
+
+def test_purge_creates_missing_dir(tmp_path):
+    target = tmp_path / "new"
+    purge_dir(target)
+    assert target.is_dir()

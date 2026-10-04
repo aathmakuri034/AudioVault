@@ -45,11 +45,20 @@ def safe_delete_tree(base: Path, path: Path | None) -> bool:
     return True
 
 
+def _is_uuid(name: str) -> bool:
+    try:
+        return str(uuid.UUID(name)) == name
+    except ValueError:
+        return False
+
+
 def purge_dir(path: Path) -> None:
-    """Create ``path`` if needed and remove everything inside it."""
+    """Create ``path`` if needed and remove stale job directories inside it.
+
+    Only UUID-named directories (the ones ``job_dir`` creates) are removed, so a
+    misconfigured ``TEMP_DIR`` pointing at a real directory can never be wiped.
+    """
     path.mkdir(parents=True, exist_ok=True)
     for child in path.iterdir():
-        if child.is_dir() and not child.is_symlink():
+        if child.is_dir() and not child.is_symlink() and _is_uuid(child.name):
             shutil.rmtree(child, ignore_errors=True)
-        else:
-            child.unlink(missing_ok=True)
