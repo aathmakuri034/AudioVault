@@ -7,13 +7,14 @@ import { NowPlayingPill } from '@/components/player/NowPlayingPill';
 import { PlaylistRow } from '@/components/playlists/PlaylistRow';
 import { SongActionsSheet } from '@/components/songs/SongActionsSheet';
 import { SongRow } from '@/components/songs/SongRow';
-import { AppText, Chip, EmptyState, IconButton } from '@/components/ui';
+import { useSongMenu } from '@/components/songs/useSongMenu';
+import { AppText, Button, Chip, EmptyState, IconButton } from '@/components/ui';
 import { getRepositories, type SongSort } from '@/services/database/repositories';
 import { usePlaySong } from '@/features/player/usePlaySong';
 import { useLibraryStore } from '@/store/libraryStore';
 import { usePlayerStore } from '@/store/playerStore';
 import { colors, spacing } from '@/theme';
-import type { Playlist, Song } from '@/types/models';
+import type { Playlist } from '@/types/models';
 import { pluralize } from '@/utils/format';
 
 import { loadSampleLibrary } from '../sampleLibrary';
@@ -35,7 +36,7 @@ export function LibraryScreen() {
   const refresh = useLibraryStore((s) => s.refresh);
 
   const [segment, setSegment] = useState<Segment>('songs');
-  const [menuSong, setMenuSong] = useState<Song | null>(null);
+  const menu = useSongMenu();
   const [seeding, setSeeding] = useState(false);
 
   const playSong = usePlaySong(songs);
@@ -110,7 +111,20 @@ export function LibraryScreen() {
         style={styles.list}
         data={playlists}
         keyExtractor={(p) => p.id}
-        ListHeaderComponent={header}
+        ListHeaderComponent={
+          <>
+            {header}
+            {playlists.length > 0 ? (
+              <Button
+                label="New playlist"
+                icon="add"
+                variant="secondary"
+                style={styles.newPlaylist}
+                onPress={() => router.push('/playlist/edit')}
+              />
+            ) : null}
+          </>
+        }
         renderItem={({ item }) => <PlaylistRow playlist={item} onPress={openPlaylist} />}
         ListEmptyComponent={
           <EmptyState
@@ -136,7 +150,7 @@ export function LibraryScreen() {
           <SongRow
             song={item}
             onPress={playSong}
-            onMore={setMenuSong}
+            onMore={menu.open}
             isActive={item.id === activeId}
             isPlaying={isPlaying}
           />
@@ -154,7 +168,7 @@ export function LibraryScreen() {
         }
         contentContainerStyle={{ paddingBottom: spacing.xxxl }}
       />
-      <SongActionsSheet song={menuSong} onClose={() => setMenuSong(null)} />
+      <SongActionsSheet {...menu.sheetProps} />
     </>
   );
 }
@@ -165,5 +179,6 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   chips: { flexDirection: 'row', gap: spacing.sm },
+  newPlaylist: { marginHorizontal: spacing.lg, marginBottom: spacing.md },
   sortRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
 });

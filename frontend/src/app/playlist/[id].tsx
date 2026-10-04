@@ -1,5 +1,1 @@
-import { PlaceholderScreen } from '@/components/layout/PlaceholderScreen';
-
-export default function Route() {
-  return <PlaceholderScreen icon="albums" title="Playlist" />;
-}
+export { PlaylistDetailsScreen as default } from '@/features/playlists/screens/PlaylistDetailsScreen';

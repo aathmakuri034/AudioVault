@@ -1,6 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, {
   FadeIn,
@@ -11,6 +11,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SongActionsSheet } from '@/components/songs/SongActionsSheet';
+import { useSongMenu } from '@/components/songs/useSongMenu';
 import { AppText, Artwork, EmptyState, IconButton } from '@/components/ui';
 import { useLibraryStore } from '@/store/libraryStore';
 import { usePlayerStore } from '@/store/playerStore';
@@ -33,7 +34,7 @@ export function NowPlayingScreen() {
   const toggleFavorite = useLibraryStore((s) => s.toggleFavorite);
   // The library copy has the freshest favorite flag.
   const librarySong = useLibraryStore((s) => s.songs.find((x) => x.id === song?.id));
-  const [menuOpen, setMenuOpen] = useState(false);
+  const menu = useSongMenu();
 
   const artSize = Math.min(width - spacing.xl * 2, 380);
   // Artwork eases back slightly while paused.
@@ -81,7 +82,7 @@ export function NowPlayingScreen() {
           <IconButton
             icon="ellipsis-horizontal"
             label="More options"
-            onPress={() => setMenuOpen(true)}
+            onPress={() => librarySong && menu.open(librarySong)}
           />
         </View>
 
@@ -121,9 +122,7 @@ export function NowPlayingScreen() {
         <ProgressBar />
         <PlayerControls />
       </View>
-      {menuOpen && librarySong ? (
-        <SongActionsSheet song={librarySong} onClose={() => setMenuOpen(false)} />
-      ) : null}
+      <SongActionsSheet {...menu.sheetProps} />
     </View>
   );
 }
