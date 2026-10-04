@@ -3,12 +3,15 @@ import { useCallback, useState } from 'react';
 import { Alert, FlatList, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { NowPlayingPill } from '@/components/player/NowPlayingPill';
 import { PlaylistRow } from '@/components/playlists/PlaylistRow';
 import { SongActionsSheet } from '@/components/songs/SongActionsSheet';
 import { SongRow } from '@/components/songs/SongRow';
 import { AppText, Chip, EmptyState, IconButton } from '@/components/ui';
 import { getRepositories, type SongSort } from '@/services/database/repositories';
+import { usePlaySong } from '@/features/player/usePlaySong';
 import { useLibraryStore } from '@/store/libraryStore';
+import { usePlayerStore } from '@/store/playerStore';
 import { colors, spacing } from '@/theme';
 import type { Playlist, Song } from '@/types/models';
 import { pluralize } from '@/utils/format';
@@ -35,10 +38,9 @@ export function LibraryScreen() {
   const [menuSong, setMenuSong] = useState<Song | null>(null);
   const [seeding, setSeeding] = useState(false);
 
-  const openSong = useCallback(
-    (song: Song) => router.push({ pathname: '/song/[id]', params: { id: song.id } }),
-    [],
-  );
+  const playSong = usePlaySong(songs);
+  const activeId = usePlayerStore((s) => s.currentSong?.id);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
   const openPlaylist = useCallback(
     (p: Playlist) => router.push({ pathname: '/playlist/[id]', params: { id: p.id } }),
     [],
@@ -62,11 +64,14 @@ export function LibraryScreen() {
         <AppText variant="title" accessibilityRole="header">
           Your Library
         </AppText>
-        <IconButton
-          icon="settings-outline"
-          label="Settings"
-          onPress={() => router.push('/settings')}
-        />
+        <View style={styles.headerActions}>
+          <NowPlayingPill />
+          <IconButton
+            icon="settings-outline"
+            label="Settings"
+            onPress={() => router.push('/settings')}
+          />
+        </View>
       </View>
       <View style={styles.chips} accessibilityRole="tablist">
         <Chip label="Songs" selected={segment === 'songs'} onPress={() => setSegment('songs')} />
@@ -127,7 +132,15 @@ export function LibraryScreen() {
         data={songs}
         keyExtractor={(s) => s.id}
         ListHeaderComponent={header}
-        renderItem={({ item }) => <SongRow song={item} onPress={openSong} onMore={setMenuSong} />}
+        renderItem={({ item }) => (
+          <SongRow
+            song={item}
+            onPress={playSong}
+            onMore={setMenuSong}
+            isActive={item.id === activeId}
+            isPlaying={isPlaying}
+          />
+        )}
         ListEmptyComponent={
           <EmptyState
             icon="musical-notes-outline"
@@ -150,6 +163,7 @@ const styles = StyleSheet.create({
   list: { flex: 1, backgroundColor: colors.background },
   header: { paddingHorizontal: spacing.lg, paddingBottom: spacing.md, gap: spacing.md },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   chips: { flexDirection: 'row', gap: spacing.sm },
   sortRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
 });
