@@ -1,0 +1,10 @@
+services:
+  api:
+    build: .
+    env_file: .env
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    # Temp MP3s live in RAM-backed storage and vanish on restart. Raise size for long tracks.
+    tmpfs:
+      - /app/tmp:rw,size=1g,uid=10001,gid=10001,mode=0700
