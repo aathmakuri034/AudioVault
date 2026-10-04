@@ -6,3 +6,5 @@ export { Icon, type IconName } from './Icon';
 export { IconButton } from './IconButton';
 export { SectionHeader } from './SectionHeader';
 export { TextField } from './TextField';
+export { BottomSheet, SheetAction } from './BottomSheet';
+export { Chip } from './Chip';

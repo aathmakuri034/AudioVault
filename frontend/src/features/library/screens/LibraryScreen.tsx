@@ -1,0 +1,155 @@
+import { router } from 'expo-router';
+import { useCallback, useState } from 'react';
+import { Alert, FlatList, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { PlaylistRow } from '@/components/playlists/PlaylistRow';
+import { SongActionsSheet } from '@/components/songs/SongActionsSheet';
+import { SongRow } from '@/components/songs/SongRow';
+import { AppText, Chip, EmptyState, IconButton } from '@/components/ui';
+import { getRepositories, type SongSort } from '@/services/database/repositories';
+import { useLibraryStore } from '@/store/libraryStore';
+import { colors, spacing } from '@/theme';
+import type { Playlist, Song } from '@/types/models';
+import { pluralize } from '@/utils/format';
+
+import { loadSampleLibrary } from '../sampleLibrary';
+
+type Segment = 'songs' | 'playlists';
+
+const SORTS: { key: SongSort; label: string }[] = [
+  { key: 'recent', label: 'Recent' },
+  { key: 'title', label: 'Title' },
+  { key: 'creator', label: 'Creator' },
+];
+
+export function LibraryScreen() {
+  const insets = useSafeAreaInsets();
+  const songs = useLibraryStore((s) => s.songs);
+  const playlists = useLibraryStore((s) => s.playlists);
+  const sort = useLibraryStore((s) => s.sort);
+  const setSort = useLibraryStore((s) => s.setSort);
+  const refresh = useLibraryStore((s) => s.refresh);
+
+  const [segment, setSegment] = useState<Segment>('songs');
+  const [menuSong, setMenuSong] = useState<Song | null>(null);
+  const [seeding, setSeeding] = useState(false);
+
+  const openSong = useCallback(
+    (song: Song) => router.push({ pathname: '/song/[id]', params: { id: song.id } }),
+    [],
+  );
+  const openPlaylist = useCallback(
+    (p: Playlist) => router.push({ pathname: '/playlist/[id]', params: { id: p.id } }),
+    [],
+  );
+
+  const seedSamples = async () => {
+    setSeeding(true);
+    try {
+      await loadSampleLibrary(await getRepositories());
+      await refresh();
+    } catch (error) {
+      Alert.alert('Could not load samples', error instanceof Error ? error.message : String(error));
+    } finally {
+      setSeeding(false);
+    }
+  };
+
+  const header = (
+    <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
+      <View style={styles.titleRow}>
+        <AppText variant="title" accessibilityRole="header">
+          Your Library
+        </AppText>
+        <IconButton
+          icon="settings-outline"
+          label="Settings"
+          onPress={() => router.push('/settings')}
+        />
+      </View>
+      <View style={styles.chips} accessibilityRole="tablist">
+        <Chip label="Songs" selected={segment === 'songs'} onPress={() => setSegment('songs')} />
+        <Chip
+          label="Playlists"
+          selected={segment === 'playlists'}
+          onPress={() => setSegment('playlists')}
+        />
+      </View>
+      {segment === 'songs' && songs.length > 0 ? (
+        <View style={styles.sortRow}>
+          <AppText variant="caption" tone="secondary">
+            {pluralize(songs.length, 'song')} · Sort by
+          </AppText>
+          {SORTS.map(({ key, label }) => (
+            <AppText
+              key={key}
+              variant="caption"
+              tone={sort === key ? 'accent' : 'secondary'}
+              onPress={() => void setSort(key)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: sort === key }}
+              suppressHighlighting
+            >
+              {label}
+            </AppText>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+
+  if (segment === 'playlists') {
+    return (
+      <FlatList
+        style={styles.list}
+        data={playlists}
+        keyExtractor={(p) => p.id}
+        ListHeaderComponent={header}
+        renderItem={({ item }) => <PlaylistRow playlist={item} onPress={openPlaylist} />}
+        ListEmptyComponent={
+          <EmptyState
+            icon="albums-outline"
+            title="No playlists yet"
+            message="Group your downloaded tracks into playlists that work offline."
+            actionLabel="Create Playlist"
+            onAction={() => router.push('/playlist/edit')}
+          />
+        }
+      />
+    );
+  }
+
+  return (
+    <>
+      <FlatList
+        style={styles.list}
+        data={songs}
+        keyExtractor={(s) => s.id}
+        ListHeaderComponent={header}
+        renderItem={({ item }) => <SongRow song={item} onPress={openSong} onMore={setMenuSong} />}
+        ListEmptyComponent={
+          <EmptyState
+            icon="musical-notes-outline"
+            title="Your library is empty"
+            message="Tracks you import appear here and play without an internet connection."
+            actionLabel={
+              __DEV__ ? (seeding ? 'Loading…' : 'Load sample library') : 'Import a track'
+            }
+            onAction={__DEV__ ? () => void seedSamples() : () => router.navigate('/')}
+          />
+        }
+        contentContainerStyle={{ paddingBottom: spacing.xxxl }}
+      />
+      <SongActionsSheet song={menuSong} onClose={() => setMenuSong(null)} />
+    </>
+  );
+}
+
+const styles = StyleSheet.create({
+  list: { flex: 1, backgroundColor: colors.background },
+  header: { paddingHorizontal: spacing.lg, paddingBottom: spacing.md, gap: spacing.md },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  chips: { flexDirection: 'row', gap: spacing.sm },
+  sortRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+});
