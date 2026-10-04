@@ -152,13 +152,13 @@ export function createSongsRepository(db: SqlDatabase) {
 
     /** Records a play: bumps counters and appends to playback history atomically. */
     async recordPlay(id: string, at = Date.now()): Promise<void> {
-      await db.withTransactionAsync(async () => {
-        const result = await db.runAsync(
+      await db.withTransactionAsync(async (tx) => {
+        const result = await tx.runAsync(
           'UPDATE songs SET last_played = ?, play_count = play_count + 1 WHERE id = ?',
           [at, id],
         );
         if (result.changes === 0) return;
-        await db.runAsync('INSERT INTO playback_history (song_id, played_at) VALUES (?, ?)', [
+        await tx.runAsync('INSERT INTO playback_history (song_id, played_at) VALUES (?, ?)', [
           id,
           at,
         ]);
@@ -172,14 +172,14 @@ export function createSongsRepository(db: SqlDatabase) {
     async delete(id: string, now = Date.now()): Promise<Song | null> {
       const song = await repo.getById(id);
       if (!song) return null;
-      await db.withTransactionAsync(async () => {
+      await db.withTransactionAsync(async (tx) => {
         // Touch affected playlists so their updated_at reflects the removal.
-        await db.runAsync(
+        await tx.runAsync(
           `UPDATE playlists SET updated_at = ?
            WHERE id IN (SELECT playlist_id FROM playlist_songs WHERE song_id = ?)`,
           [now, id],
         );
-        await db.runAsync('DELETE FROM songs WHERE id = ?', [id]);
+        await tx.runAsync('DELETE FROM songs WHERE id = ?', [id]);
       });
       return song;
     },

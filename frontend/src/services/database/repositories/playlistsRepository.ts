@@ -46,21 +46,21 @@ function normalizeName(name: string): string {
 }
 
 export function createPlaylistsRepository(db: SqlDatabase) {
-  async function touch(playlistId: string, now: number) {
-    await db.runAsync('UPDATE playlists SET updated_at = ? WHERE id = ?', [now, playlistId]);
+  async function touch(exec: SqlDatabase, playlistId: string, now: number) {
+    await exec.runAsync('UPDATE playlists SET updated_at = ? WHERE id = ?', [now, playlistId]);
   }
 
-  async function rewritePositions(playlistId: string, songIds: string[]) {
+  async function rewritePositions(exec: SqlDatabase, playlistId: string, songIds: string[]) {
     for (let i = 0; i < songIds.length; i += 1) {
-      await db.runAsync(
+      await exec.runAsync(
         'UPDATE playlist_songs SET position = ? WHERE playlist_id = ? AND song_id = ?',
         [i, playlistId, songIds[i]],
       );
     }
   }
 
-  async function orderedSongIds(playlistId: string): Promise<string[]> {
-    const rows = await db.getAllAsync<{ song_id: string }>(
+  async function orderedSongIds(exec: SqlDatabase, playlistId: string): Promise<string[]> {
+    const rows = await exec.getAllAsync<{ song_id: string }>(
       'SELECT song_id FROM playlist_songs WHERE playlist_id = ? ORDER BY position',
       [playlistId],
     );
@@ -134,27 +134,27 @@ export function createPlaylistsRepository(db: SqlDatabase) {
     /** Appends a song. Returns false if it was already in the playlist. */
     async addSong(playlistId: string, songId: string, now = Date.now()): Promise<boolean> {
       let added = false;
-      await db.withTransactionAsync(async () => {
-        const result = await db.runAsync(
+      await db.withTransactionAsync(async (tx) => {
+        const result = await tx.runAsync(
           `INSERT OR IGNORE INTO playlist_songs (playlist_id, song_id, position, added_at)
            VALUES (?, ?, (SELECT COALESCE(MAX(position) + 1, 0) FROM playlist_songs WHERE playlist_id = ?), ?)`,
           [playlistId, songId, playlistId, now],
         );
         added = result.changes > 0;
-        if (added) await touch(playlistId, now);
+        if (added) await touch(tx, playlistId, now);
       });
       return added;
     },
 
     async removeSong(playlistId: string, songId: string, now = Date.now()): Promise<void> {
-      await db.withTransactionAsync(async () => {
-        const result = await db.runAsync(
+      await db.withTransactionAsync(async (tx) => {
+        const result = await tx.runAsync(
           'DELETE FROM playlist_songs WHERE playlist_id = ? AND song_id = ?',
           [playlistId, songId],
         );
         if (result.changes === 0) return;
-        await rewritePositions(playlistId, await orderedSongIds(playlistId));
-        await touch(playlistId, now);
+        await rewritePositions(tx, playlistId, await orderedSongIds(tx, playlistId));
+        await touch(tx, playlistId, now);
       });
     },
 
@@ -165,16 +165,16 @@ export function createPlaylistsRepository(db: SqlDatabase) {
       toIndex: number,
       now = Date.now(),
     ): Promise<void> {
-      await db.withTransactionAsync(async () => {
-        const ids = await orderedSongIds(playlistId);
+      await db.withTransactionAsync(async (tx) => {
+        const ids = await orderedSongIds(tx, playlistId);
         if (fromIndex < 0 || fromIndex >= ids.length || toIndex < 0 || toIndex >= ids.length) {
           throw new RangeError('Playlist position out of range.');
         }
         if (fromIndex === toIndex) return;
         const [moved] = ids.splice(fromIndex, 1);
         ids.splice(toIndex, 0, moved);
-        await rewritePositions(playlistId, ids);
-        await touch(playlistId, now);
+        await rewritePositions(tx, playlistId, ids);
+        await touch(tx, playlistId, now);
       });
     },
 
