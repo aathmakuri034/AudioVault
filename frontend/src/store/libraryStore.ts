@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { z } from 'zod';
 
 import { createLibraryService } from '@/features/library/libraryService';
+import { getAudioService } from '@/services/audio/playbackService';
 import { getRepositories, SettingKeys, type SongSort } from '@/services/database/repositories';
 import type { Playlist, Song } from '@/types/models';
 
@@ -79,10 +80,14 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     const repos = await getRepositories();
     await repos.songs.setFavorite(songId, !song.isFavorite);
     await get().refresh();
+    const updated = get().songs.find((s) => s.id === songId);
+    if (updated) getAudioService().updateSongs([updated]);
   },
 
   async deleteSong(songId) {
     const repos = await getRepositories();
+    // Stop or advance playback first so the player never holds a deleted file.
+    await getAudioService().handleSongDeleted(songId);
     await createLibraryService(repos).deleteSong(songId);
     await get().refresh();
   },
