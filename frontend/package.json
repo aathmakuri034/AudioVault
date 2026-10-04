@@ -1,6 +1,6 @@
 {
   "name": "audiovault",
-  "main": "expo-router/entry",
+  "main": "index.ts",
   "version": "1.0.0",
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
