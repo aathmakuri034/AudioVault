@@ -42,6 +42,7 @@
     "eslint-config-expo": "~57.0.2",
     "jest": "^29.7.0",
     "jest-expo": "^57.0.5",
+    "prettier": "^3.9.9",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -53,7 +54,9 @@
     "typecheck": "tsc --noEmit",
     "test": "jest",
     "test:watch": "jest --watch",
-    "check": "npm run typecheck && npm run lint && npm test"
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm test",
+    "format": "prettier --write \"src/**/*.{ts,tsx}\" jest.setup.ts",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx}\" jest.setup.ts"
   },
   "private": true,
   "jest": {

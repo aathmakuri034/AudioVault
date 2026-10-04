@@ -25,7 +25,11 @@ describe('downloadsRepository', () => {
     const d = await downloads.create(meta, 'preparing', 1);
     expect(d).toMatchObject({ status: 'preparing', progress: 0, metadata: meta, jobId: null });
 
-    await downloads.update(d.id, { jobId: 'job-1', downloadToken: 'tok', status: 'processing', progress: 40 }, 2);
+    await downloads.update(
+      d.id,
+      { jobId: 'job-1', downloadToken: 'tok', status: 'processing', progress: 40 },
+      2,
+    );
     expect(await downloads.getById(d.id)).toMatchObject({
       jobId: 'job-1',
       downloadToken: 'tok',

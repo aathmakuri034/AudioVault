@@ -50,13 +50,7 @@ export type RepeatMode = 'off' | 'all' | 'one';
 
 /** UI-facing download lifecycle. These are the states the spec requires. */
 export type DownloadStatus =
-  | 'validating'
-  | 'preparing'
-  | 'downloading'
-  | 'processing'
-  | 'saving'
-  | 'completed'
-  | 'failed';
+  'validating' | 'preparing' | 'downloading' | 'processing' | 'saving' | 'completed' | 'failed';
 
 export type MediaMetadata = {
   provider: string;
