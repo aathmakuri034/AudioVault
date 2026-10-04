@@ -75,7 +75,11 @@ function RootStack() {
         }}
       />
       <Stack.Screen name="song/[id]" options={{ title: 'Song Details', presentation: 'modal' }} />
-      <Stack.Screen name="download/[id]" options={{ title: 'Download' }} />
+      <Stack.Screen
+        name="download/confirm"
+        options={{ title: 'Confirm Download', presentation: 'modal' }}
+      />
+      <Stack.Screen name="download/[id]" options={{ title: 'Download Details' }} />
       <Stack.Screen name="settings" options={{ title: 'Settings' }} />
     </Stack>
   );
