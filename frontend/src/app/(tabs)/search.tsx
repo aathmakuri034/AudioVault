@@ -1,5 +1,1 @@
-import { PlaceholderScreen } from '@/components/layout/PlaceholderScreen';
-
-export default function Route() {
-  return <PlaceholderScreen icon="search" title="Search" />;
-}
+export { SearchScreen as default } from '@/features/search/screens/SearchScreen';

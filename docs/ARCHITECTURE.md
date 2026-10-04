@@ -76,3 +76,13 @@ FastAPI service in `backend/` that turns a user-supplied URL (for media the user
 - **Rate limits.** Per client IP: `METADATA_RATE_LIMIT` and `DOWNLOAD_RATE_LIMIT`; `429` with `Retry-After`. Request bodies over `MAX_REQUEST_BYTES` get `413`, whether declared or chunked.
 - **Error contract.** Every error is `{"error": {"code", "message"}}` with a snake_case code (`invalid_url`, `private_media`, `unavailable_media`, `restricted_media`, `unsupported_media`, `media_too_long`, `provider_error`, `conversion_failed`, `job_not_found`, `job_not_ready`, `file_expired`, `invalid_token`, `unauthorized`, `payload_too_large`, `rate_limited`, `server_busy`, `timeout`, `invalid_request`, `internal_error`, ...). yt-dlp messages are mapped by substring to these codes; raw output and stack traces are only logged server-side.
 - **State is in-process.** Jobs live in memory, so run a single worker process (the Docker CMD does). A restart drops all jobs and purges temp files.
+
+## Phase: Search
+
+### Search
+
+- The Search tab (`frontend/src/app/(tabs)/search.tsx`) re-exports `features/search/screens/SearchScreen.tsx`, a single `SectionList` with "Songs" (`SongRow`) and "Playlists" (`PlaylistRow`) sections.
+- `features/search/searchLibrary.ts` trims the query, returns empty results for a blank query without touching the DB, and runs `songs.search` (limit 50) and `playlists.search` (limit 20) in parallel.
+- `features/search/useLibrarySearch.ts` debounces input by 200 ms, discards stale responses, and re-runs when the library store's songs or playlists change, so a song deleted from a result's menu disappears immediately.
+- **Offline-only by design:** it queries only the local SQLite library (title, creator, playlist name). No network or YouTube search is ever called, so it works in airplane mode.
+- Repository `LIKE` queries escape `%` and `_`, so those characters match literally.
