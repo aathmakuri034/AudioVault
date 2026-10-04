@@ -15,8 +15,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # Deno is the JS runtime yt-dlp uses to solve YouTube challenges.
-COPY --from=denoland/deno:bin /deno /usr/local/bin/deno
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=denoland/deno:bin-2.9.7 /deno /usr/local/bin/deno
+COPY --from=ghcr.io/astral-sh/uv:0.12.23 /uv /uvx /bin/
 
 RUN useradd --system --create-home --uid 10001 app
 WORKDIR /app
