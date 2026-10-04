@@ -1,5 +1,1 @@
-import { PlaceholderScreen } from '@/components/layout/PlaceholderScreen';
-
-export default function Route() {
-  return <PlaceholderScreen icon="cloud-download" title="Download Details" />;
-}
+export { DownloadDetailsScreen as default } from '@/features/downloads/screens/DownloadDetailsScreen';
