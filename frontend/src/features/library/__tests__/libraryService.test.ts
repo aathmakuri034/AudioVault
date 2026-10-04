@@ -58,3 +58,24 @@ describe('libraryService.cleanUpOrphans', () => {
     expect(fakeFs.entries.has(`${MUSIC}${ID}.mp3`)).toBe(true);
   });
 });
+
+describe('libraryService.relocateFilePaths', () => {
+  it('re-points songs at the current container after iOS moves it', async () => {
+    const { repos, library } = await setup();
+    const OLD = 'file:///var/mobile/Containers/Data/Application/OLD-UUID/Documents/music/';
+    await repos.songs.insert(
+      makeSong({ id: ID, localAudioUri: `${OLD}${ID}.mp3`, localArtworkUri: `${OLD}${ID}.jpg` }),
+    );
+    await repos.songs.insert(
+      makeSong({ id: ORPHAN, localAudioUri: `${MUSIC}${ORPHAN}.mp3`, localArtworkUri: null }),
+    );
+
+    expect(await library.relocateFilePaths()).toBe(1);
+    expect(await repos.songs.getById(ID)).toMatchObject({
+      localAudioUri: `${MUSIC}${ID}.mp3`,
+      localArtworkUri: `${MUSIC}${ID}.jpg`,
+    });
+    expect((await repos.songs.getById(ORPHAN))?.localArtworkUri).toBeNull();
+    expect(await library.relocateFilePaths()).toBe(0);
+  });
+});

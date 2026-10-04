@@ -146,6 +146,17 @@ export function createSongsRepository(db: SqlDatabase) {
       return row ? mapSong(row) : null;
     },
 
+    async updateFileUris(
+      id: string,
+      localAudioUri: string,
+      localArtworkUri: string | null,
+    ): Promise<void> {
+      await db.runAsync(
+        'UPDATE songs SET local_audio_uri = ?, local_artwork_uri = ? WHERE id = ?',
+        [localAudioUri, localArtworkUri, id],
+      );
+    },
+
     async setFavorite(id: string, isFavorite: boolean): Promise<void> {
       await db.runAsync('UPDATE songs SET is_favorite = ? WHERE id = ?', [isFavorite ? 1 : 0, id]);
     },
