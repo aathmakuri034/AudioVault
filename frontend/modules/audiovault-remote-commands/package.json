@@ -1,0 +1,10 @@
+{
+  "name": "audiovault-remote-commands",
+  "version": "1.0.0",
+  "description": "Registers lock screen / Control Center next and previous track commands for AudioVault.",
+  "main": "index.ts",
+  "license": "MIT",
+  "author": "Abi Athmakuri",
+  "homepage": "https://github.com/aathmakuri034/AudioVault",
+  "private": true
+}
