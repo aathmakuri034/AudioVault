@@ -8,7 +8,7 @@ import { PlaylistRow } from '@/components/playlists/PlaylistRow';
 import { SongActionsSheet } from '@/components/songs/SongActionsSheet';
 import { SongRow } from '@/components/songs/SongRow';
 import { useSongMenu } from '@/components/songs/useSongMenu';
-import { AppText, Chip, EmptyState, IconButton } from '@/components/ui';
+import { AppText, Button, Chip, EmptyState, IconButton } from '@/components/ui';
 import { getRepositories, type SongSort } from '@/services/database/repositories';
 import { usePlaySong } from '@/features/player/usePlaySong';
 import { useLibraryStore } from '@/store/libraryStore';
@@ -111,7 +111,20 @@ export function LibraryScreen() {
         style={styles.list}
         data={playlists}
         keyExtractor={(p) => p.id}
-        ListHeaderComponent={header}
+        ListHeaderComponent={
+          <>
+            {header}
+            {playlists.length > 0 ? (
+              <Button
+                label="New playlist"
+                icon="add"
+                variant="secondary"
+                style={styles.newPlaylist}
+                onPress={() => router.push('/playlist/edit')}
+              />
+            ) : null}
+          </>
+        }
         renderItem={({ item }) => <PlaylistRow playlist={item} onPress={openPlaylist} />}
         ListEmptyComponent={
           <EmptyState
@@ -166,5 +179,6 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   chips: { flexDirection: 'row', gap: spacing.sm },
+  newPlaylist: { marginHorizontal: spacing.lg, marginBottom: spacing.md },
   sortRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
 });
