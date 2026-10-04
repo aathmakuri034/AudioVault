@@ -6,13 +6,15 @@ import { makeSong } from '@/test-utils/fixtures';
 import { createTestDb } from '@/test-utils/sqliteTestDb';
 import type { Song } from '@/types/models';
 
-import { AudioService } from '../player';
+import { AudioService, STALE_STATUS_MS } from '../player';
 
 jest.mock('expo-file-system', () => require('@/test-utils/fakeFileSystem').fakeExpoFileSystem);
 jest.mock('expo-sqlite', () => ({}));
 
 type Setup = {
   engine: FakeAudioEngine;
+  /** Emits a status event without letting time pass (i.e. a stale event). */
+  emitImmediately: (partial: Parameters<FakeAudioEngine['emitStatus']>[0]) => void;
   audio: AudioService;
   repos: Repositories;
   songs: Song[];
@@ -44,8 +46,15 @@ async function setup(count = 3, repos?: Repositories): Promise<Setup> {
     now: () => clock.now,
     random: () => 0,
   });
+  // Real events arrive after time has passed; advance the clock beyond the
+  // stale-status window for every emitted event unless a test opts out.
+  const rawEmit = engine.emitStatus.bind(engine);
+  engine.emitStatus = (partial) => {
+    clock.now += STALE_STATUS_MS + 1;
+    rawEmit(partial);
+  };
   audio.attach();
-  return { engine, audio, repos: r, songs, missing, clock };
+  return { engine, emitImmediately: rawEmit, audio, repos: r, songs, missing, clock };
 }
 
 const state = () => usePlayerStore.getState();
@@ -278,5 +287,54 @@ describe('queue editing', () => {
     expect(state().queue.map((s) => s.id)).toEqual(['song-0', 'song-2', 'song-1']);
     await audio.skipToQueueIndex(2);
     expect(state().currentSong?.id).toBe('song-1');
+  });
+});
+
+describe('review fixes', () => {
+  it('ignores a stale track-end event that arrives right after a skip', async () => {
+    const { engine, emitImmediately, audio, songs } = await setup();
+    await audio.playSongs(songs);
+    await audio.next(); // user skips to song-1
+    emitImmediately({ didJustFinish: true }); // late "song-0 ended" event
+    await flush();
+    expect(engine.current?.id).toBe('song-1');
+  });
+
+  it('skips a track that fails to decode and tells the user', async () => {
+    const { engine, audio, songs } = await setup();
+    await audio.playSongs(songs);
+    engine.emitStatus({ error: 'AVPlayerItem failed', isPlaying: false });
+    await flush();
+    expect(engine.current?.id).toBe('song-1');
+    expect(state().error).toMatch(/couldn.t be played/);
+  });
+
+  it('pauses on a decode error at the end of the queue', async () => {
+    const { engine, audio, songs } = await setup();
+    await audio.playSongs(songs, 2);
+    engine.emitStatus({ error: 'decode', isPlaying: true });
+    await flush();
+    expect(engine.current?.id).toBe('song-2');
+    expect(state().isPlaying).toBe(false);
+  });
+
+  it('persists the new track at position 0, not the previous position', async () => {
+    const { engine, audio, songs, repos } = await setup();
+    await audio.playSongs(songs);
+    engine.emitStatus({ isPlaying: true, position: 200 });
+    await audio.next();
+    await flush();
+    const second = await setup(0, repos);
+    await second.audio.restore();
+    expect(second.engine.loaded.at(-1)).toMatchObject({ autoplay: false, startAt: 0 });
+    expect(second.engine.current?.id).toBe('song-1');
+  });
+
+  it('does not restart the queue from the top when the last track is removed', async () => {
+    const { engine, audio, songs } = await setup();
+    await audio.playSongs(songs, 2);
+    await audio.removeFromQueue(2);
+    expect(engine.current?.id).toBe('song-0');
+    expect(engine.loaded.at(-1)?.autoplay).toBe(false);
   });
 });

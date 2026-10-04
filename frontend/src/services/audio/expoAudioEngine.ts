@@ -110,8 +110,9 @@ export class ExpoAudioEngine implements AudioEngine {
   stop() {
     if (!this.player) return;
     this.player.pause();
-    this.player.clearLockScreenControls();
-    this.lockScreenActive = false;
+    // Deliberately not clearLockScreenControls(): expo-audio re-adds its
+    // play/pause targets on the next setActiveForLockScreen without removing
+    // the old block-based ones, so headset toggles would fire twice.
     disableRemoteNavigation();
   }
 
