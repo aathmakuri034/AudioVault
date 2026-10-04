@@ -35,3 +35,6 @@ frontend/android/
 # Backend runtime data
 backend/tmp/
 backend/data/
+
+# Claude Code worktrees
+.claude/worktrees/
