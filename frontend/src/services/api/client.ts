@@ -108,7 +108,7 @@ export class ApiClient {
         body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
         signal: controller.signal,
       });
-    } catch (error) {
+    } catch {
       if (controller.signal.aborted) {
         throw new ApiError('timeout', 'The server took too long to respond. Try again.');
       }
