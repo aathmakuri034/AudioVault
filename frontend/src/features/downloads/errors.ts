@@ -36,6 +36,7 @@ const MESSAGES: Record<string, string> = {
   server_busy: 'The server is busy right now. Try again shortly.',
   server_error: 'The server ran into a problem. Try again.',
   unauthorized: 'The server rejected the API key. Check Settings.',
+  invalid_token: 'The download link was rejected. Try again.',
   not_configured: 'Set the server address in Settings first.',
   invalid_response: 'The server sent an unexpected response. Check the server address.',
 };

@@ -12,10 +12,12 @@ import { useLibraryStore } from '@/store/libraryStore';
  */
 export async function initializeApp(): Promise<void> {
   const repos = await getRepositories();
+  const library = createLibraryService(repos);
   try {
-    await createLibraryService(repos).cleanUpOrphans();
+    await library.relocateFilePaths();
+    await library.cleanUpOrphans();
   } catch {
-    // Non-fatal: cleanup is retried on the next launch.
+    // Non-fatal: both are retried on the next launch.
   }
   await useLibraryStore.getState().refresh();
 

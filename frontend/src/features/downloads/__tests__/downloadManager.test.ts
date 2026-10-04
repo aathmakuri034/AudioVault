@@ -6,7 +6,7 @@ import { makeSong } from '@/test-utils/fixtures';
 import { createTestDb } from '@/test-utils/sqliteTestDb';
 import type { DownloadRecord, DownloadStatus } from '@/types/models';
 
-import { DownloadManager } from '../downloadManager';
+import { DownloadManager, fileTransferError } from '../downloadManager';
 import { DownloadError } from '../errors';
 import type { FileTransfer } from '../fileTransfer';
 
@@ -358,5 +358,64 @@ describe('DownloadManager resume and retry', () => {
 
   it('exposes DownloadError for UI handling', () => {
     expect(new DownloadError('duplicate').message).toBe('This track has already been downloaded.');
+  });
+});
+
+describe('DownloadManager review fixes', () => {
+  it.each([
+    ['Unable to download file: server returned HTTP 401', 'unauthorized'],
+    ['server returned HTTP 410', 'file_expired'],
+    ['HTTP status 404', 'file_expired'],
+    ['server returned HTTP 503', 'server_error'],
+    ['The network connection was lost.', 'interrupted'],
+  ])('maps file transfer failure %p to %p', (message, code) => {
+    expect(fileTransferError(new Error(message)).code).toBe(code);
+  });
+
+  it('honours a cancel that lands after the transfer finished', async () => {
+    const h = await setup();
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const original = h.transfer.downloadSmall.bind(h.transfer);
+    h.transfer.downloadSmall = async (url, dest) => {
+      await gate;
+      return original(url, dest);
+    };
+    const record = await h.manager.start(metadata);
+    for (let i = 0; i < 30 && h.transfer.files.size === 0; i += 1) await flush();
+    await h.manager.cancel(record.id);
+    release();
+    expect(await settle(h, record.id)).toMatchObject({ status: 'failed', errorCode: 'cancelled' });
+    expect(await h.repos.songs.getById(record.id)).toBeNull();
+  });
+
+  it('does not leak a running entry when the database cannot open', async () => {
+    const h = await setup();
+    const broken = new DownloadManager({
+      api: h.api,
+      getRepositories: () => Promise.reject(new Error('db locked')),
+      transfer: h.transfer,
+    });
+    await broken.run('some-id');
+    expect(broken.isRunning('some-id')).toBe(false);
+  });
+
+  it('auto-retries recent network failures on resume, but not other failures', async () => {
+    const h = await setup();
+    h.transfer.fail = new Error('The network connection was lost.');
+    const flaky = await h.manager.start(metadata);
+    await settle(h, flaky.id);
+    h.transfer.fail = null;
+    h.api.jobs = [HAPPY_JOBS[3]];
+
+    const resumed = await h.manager.resumeActive();
+    expect(resumed).toContain(flaky.id);
+    expect(await settle(h, flaky.id)).toMatchObject({ status: 'completed' });
+
+    const h2 = await setup();
+    h2.api.startResult = new ApiError('private_media', 'private', 403);
+    const permanent = await h2.manager.start(metadata);
+    await settle(h2, permanent.id);
+    expect(await h2.manager.resumeActive()).not.toContain(permanent.id);
   });
 });

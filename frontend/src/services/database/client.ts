@@ -1,21 +1,21 @@
 import { openDatabaseAsync, type SQLiteDatabase } from 'expo-sqlite';
 
 import { applyPragmas, migrate } from './migrations';
+import { createSerializedDatabase } from './serialized';
 import type { SqlDatabase } from './types';
 
 const DATABASE_NAME = 'audiovault.db';
 
 let dbPromise: Promise<SqlDatabase> | null = null;
 
-/** Narrows expo-sqlite's overloaded API to the {@link SqlDatabase} contract. */
+/** Narrows expo-sqlite's overloaded API and serializes access (see serialized.ts). */
 function adapt(db: SQLiteDatabase): SqlDatabase {
-  return {
+  return createSerializedDatabase({
     execAsync: (source) => db.execAsync(source),
     runAsync: (source, params = []) => db.runAsync(source, params),
     getFirstAsync: (source, params = []) => db.getFirstAsync(source, params),
     getAllAsync: (source, params = []) => db.getAllAsync(source, params),
-    withTransactionAsync: (task) => db.withTransactionAsync(task),
-  };
+  });
 }
 
 async function open(): Promise<SqlDatabase> {

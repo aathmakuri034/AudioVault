@@ -105,10 +105,10 @@ export async function migrate(db: SqlDatabase): Promise<void> {
   }
   while (version < SCHEMA_VERSION) {
     const next = version + 1;
-    await db.withTransactionAsync(async () => {
-      await db.execAsync(MIGRATIONS[version]);
+    await db.withTransactionAsync(async (tx) => {
+      await tx.execAsync(MIGRATIONS[version]);
       // PRAGMA does not accept bound parameters; `next` is a trusted integer.
-      await db.execAsync(`PRAGMA user_version = ${next};`);
+      await tx.execAsync(`PRAGMA user_version = ${next};`);
     });
     version = next;
   }

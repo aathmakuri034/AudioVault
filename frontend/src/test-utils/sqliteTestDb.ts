@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 
 import { applyPragmas, migrate } from '@/services/database/migrations';
+import { createSerializedDatabase } from '@/services/database/serialized';
 import type { SqlDatabase, SqlParams } from '@/services/database/types';
 
 /**
@@ -12,53 +13,28 @@ export function createRawTestDb(): SqlDatabase & { close(): void } {
   // better-sqlite3 enables foreign keys by default; turn them off so tests
   // prove that applyPragmas() is what enables them, as on device.
   raw.pragma('foreign_keys = OFF');
+  const args = (params?: SqlParams) => params ?? [];
 
-  let depth = 0;
-  const toArgs = (params?: SqlParams) => params ?? [];
-
-  return {
+  // Same serialization as the device database, so a repository that uses the
+  // outer handle inside a transaction deadlocks here too (and fails the test).
+  const db = createSerializedDatabase({
     async execAsync(source) {
       raw.exec(source);
     },
     async runAsync(source, params) {
-      const info = raw.prepare(source).run(...toArgs(params));
+      const info = raw.prepare(source).run(...args(params));
       return { lastInsertRowId: Number(info.lastInsertRowid), changes: info.changes };
     },
     async getFirstAsync<T>(source: string, params?: SqlParams) {
       const stmt = raw.prepare(source);
-      const row = stmt.reader ? stmt.get(...toArgs(params)) : undefined;
+      const row = stmt.reader ? stmt.get(...args(params)) : undefined;
       return (row as T | undefined) ?? null;
     },
     async getAllAsync<T>(source: string, params?: SqlParams) {
-      return raw.prepare(source).all(...toArgs(params)) as T[];
+      return raw.prepare(source).all(...args(params)) as T[];
     },
-    async withTransactionAsync(task) {
-      // Nested calls join the outer transaction, as a savepoint-free shim.
-      if (depth > 0) {
-        depth += 1;
-        try {
-          await task();
-        } finally {
-          depth -= 1;
-        }
-        return;
-      }
-      depth = 1;
-      raw.exec('BEGIN');
-      try {
-        await task();
-        raw.exec('COMMIT');
-      } catch (error) {
-        raw.exec('ROLLBACK');
-        throw error;
-      } finally {
-        depth = 0;
-      }
-    },
-    close() {
-      raw.close();
-    },
-  };
+  });
+  return { ...db, close: () => raw.close() };
 }
 
 /** A migrated test database with production pragmas applied. */

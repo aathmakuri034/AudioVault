@@ -11,6 +11,12 @@ import { QueueManager } from './queueManager';
 /** Pressing Previous after this many seconds restarts the track instead. */
 export const RESTART_THRESHOLD_SECONDS = 3;
 const PERSIST_INTERVAL_MS = 5000;
+/**
+ * Status events carry no track identity, so events arriving this soon after a
+ * load may still describe the previous track. Track-end and play-recording
+ * decisions ignore them to avoid double-advancing or miscounting a play.
+ */
+export const STALE_STATUS_MS = 750;
 
 const persistedStateSchema = z.object({
   queue: z.object({
@@ -53,7 +59,11 @@ export class AudioService {
   private loadToken = 0;
   private recordedToken = -1;
   private lastPersist = 0;
-  private status: EngineStatus | null = null;
+  private loadedAt = 0;
+  /** Last known position of the current track, for persistence. */
+  private position = 0;
+  /** loadToken for which a playback error was already handled. */
+  private erroredToken = -1;
 
   constructor(deps: AudioServiceDeps) {
     this.deps = deps;
@@ -185,17 +195,28 @@ export class AudioService {
   }
 
   async removeFromQueue(index: number) {
-    const wasPlaying = this.engine.getStatus().isPlaying;
-    if (this.queue.removeAt(index)) await this.loadCurrent({ autoplay: wasPlaying });
-    else this.publishQueue();
-    void this.persist(true);
+    await this.afterRemoval(() => this.queue.removeAt(index));
   }
 
   /** Call after a song is deleted from the library. */
   async handleSongDeleted(songId: string) {
+    await this.afterRemoval(() => this.queue.removeSong(songId));
+  }
+
+  /**
+   * Applies a queue removal. If the current track was removed, the next one
+   * takes over (keeping play/pause state), except when the removal wrapped
+   * back to the start of the queue: then it waits, paused.
+   */
+  private async afterRemoval(remove: () => boolean) {
     const wasPlaying = this.engine.getStatus().isPlaying;
-    if (this.queue.removeSong(songId)) await this.loadCurrent({ autoplay: wasPlaying });
-    else this.publishQueue();
+    const indexBefore = this.queue.currentIndex;
+    if (remove()) {
+      const wrapped = this.queue.currentIndex < indexBefore;
+      await this.loadCurrent({ autoplay: wasPlaying && !wrapped });
+    } else {
+      this.publishQueue();
+    }
     void this.persist(true);
   }
 
@@ -213,7 +234,7 @@ export class AudioService {
    */
   syncFromEngine() {
     const status = this.engine.getStatus();
-    this.status = status;
+    this.position = status.position;
     this.setState({
       isPlaying: status.isPlaying,
       isBuffering: status.isBuffering,
@@ -236,14 +257,14 @@ export class AudioService {
   }
 
   async persist(force = false) {
-    const now = (this.deps.now ?? Date.now)();
+    const now = this.now();
     if (!force && now - this.lastPersist < PERSIST_INTERVAL_MS) return;
     this.lastPersist = now;
     try {
       const repos = await this.deps.getRepositories();
       await repos.settings.set(SettingKeys.playerState, {
         queue: this.queue.snapshot(),
-        positionSeconds: Math.max(0, this.status?.position ?? 0),
+        positionSeconds: Math.max(0, this.position),
       });
     } catch {
       // Persistence is best effort; playback must never fail because of it.
@@ -260,7 +281,7 @@ export class AudioService {
       const song = this.queue.current();
       if (!song) {
         this.engine.stop();
-        this.status = null;
+        this.position = 0;
         this.setState({
           currentSong: null,
           isPlaying: false,
@@ -284,6 +305,8 @@ export class AudioService {
           },
           { autoplay, startAt },
         );
+        this.loadedAt = this.now();
+        this.position = startAt ?? 0;
         this.setState({
           currentSong: song,
           position: startAt ?? 0,
@@ -321,13 +344,20 @@ export class AudioService {
   }
 
   private async handleStatus(status: EngineStatus) {
-    this.status = status;
+    const fresh = this.now() - this.loadedAt >= STALE_STATUS_MS;
+    if (fresh) this.position = status.position;
     this.setState({
       isPlaying: status.isPlaying,
       isBuffering: status.isBuffering,
-      position: status.position,
+      ...(fresh ? { position: status.position } : {}),
       ...(status.duration > 0 ? { duration: status.duration } : {}),
     });
+    if (!fresh) return;
+
+    if (status.error && this.erroredToken !== this.loadToken) {
+      await this.handlePlaybackError();
+      return;
+    }
 
     const song = this.queue.current();
     if (song && status.isPlaying && this.recordedToken !== this.loadToken) {
@@ -356,10 +386,32 @@ export class AudioService {
       return;
     }
     // End of queue with repeat off: rewind the last track and stop.
+    const token = this.loadToken;
     await this.engine.seekTo(0);
+    if (token !== this.loadToken) return; // the user started something else meanwhile
     this.engine.pause();
+    this.position = 0;
     this.setState({ isPlaying: false, position: 0 });
     void this.persist(true);
+  }
+
+  /** A file that exists but won't decode: tell the user and move on. */
+  private async handlePlaybackError() {
+    this.erroredToken = this.loadToken;
+    this.setState({ error: 'This track couldn’t be played. The file may be damaged.' });
+    if (this.queue.hasNext()) {
+      this.queue.next('user');
+      const skipped = this.queue.current();
+      await this.loadCurrent({ autoplay: true });
+      if (skipped) this.setState({ error: 'Skipped a track that couldn’t be played.' });
+    } else {
+      this.engine.pause();
+      this.setState({ isPlaying: false });
+    }
+  }
+
+  private now() {
+    return (this.deps.now ?? Date.now)();
   }
 
   private async handleRemoteCommand(command: RemoteCommand) {
@@ -370,7 +422,7 @@ export class AudioService {
   private async recordPlay(songId: string) {
     try {
       const repos = await this.deps.getRepositories();
-      await repos.songs.recordPlay(songId, (this.deps.now ?? Date.now)());
+      await repos.songs.recordPlay(songId, this.now());
       this.deps.onPlayRecorded?.();
     } catch {
       // History is non-critical.

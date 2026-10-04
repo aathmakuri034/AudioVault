@@ -18,5 +18,6 @@ export interface SqlDatabase {
   runAsync(source: string, params?: SqlParams): Promise<SqlRunResult>;
   getFirstAsync<T>(source: string, params?: SqlParams): Promise<T | null>;
   getAllAsync<T>(source: string, params?: SqlParams): Promise<T[]>;
-  withTransactionAsync(task: () => Promise<void>): Promise<void>;
+  /** Runs `task` atomically. Inside it, use the `tx` handle for every statement. */
+  withTransactionAsync(task: (tx: SqlDatabase) => Promise<void>): Promise<void>;
 }
